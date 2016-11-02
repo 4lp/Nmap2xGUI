@@ -39,7 +39,6 @@ class Gui(QMainWindow):
                     "- This utility has only been tested on /24 networks and smaller (I don't see any reason why it wouldn't work for bigger "
                     "networks but the sorting may be messed up)\n"
                     "\n"
-                    "        Questions? Comments? Feature requests? Email mike@avende.com\n"
                     "        ")
         self.w.setText(helpText)
         self.w.setReadOnly(True)
