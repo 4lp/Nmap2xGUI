@@ -1,6 +1,6 @@
 import sys
 from PyQt5.QtWidgets import (QMainWindow, QFileDialog, QApplication, QPushButton, QLineEdit, QAction, qApp, QTextEdit,
-                             QWidget)
+                             QWidget, QActionGroup)
 from PyQt5.QtCore import pyqtSlot
 import xml.etree.ElementTree as ET
 import os
@@ -24,15 +24,19 @@ class Gui(QMainWindow):
         self.w = HelpPopup()
         self.w.setGeometry(200, 200, 400, 250)
         self.w.setWindowTitle("Help")
-        helpText = ("Weclome to Nmap2Moin, the Nmap XML to Moinmoin table converter!\n"
+        helpText = ("Weclome to Nmap2xGUI, the Nmap XML converter!\n"
+                    "\n"
+                    "This tool was developed to save time when documenting new networks. For now, it's really only useful if you need to save a directory of which hostnames correspond to which"
+                    "IP addresses in, for example, the company wiki."
                     "\n"
                     "Using this utility is easy - simply press the \"Find XML file...\" button to locate your Nmap-generated XML file, "
                     "then press the \"Set save target...\" button to specify the file where you would like your output saved to. "
-                    "Once both fields are correctly set, click the \"CONVERT!\" button and the conversion will happen."
+                    "Then, select what format you would like your output saved in."
+                    "Once both fields and the output format are correctly set, click the \"CONVERT!\" button and the conversion will happen."
                     "\n"
                     "\n"
                     "Important notes:\n"
-                    "- The output of this utility is a text file containing a Moinmoin table in the form: \n"
+                    "- If the Moinmoin table output is selected, the output of this utility is a text file containing a Moinmoin table in the form: \n"
                     "               ||Hostname||IP Address|| \n"
                     "As such it will only include devices with a hostname.\n"
                     "- This utility outputs a list sorted by IP address\n"
@@ -43,6 +47,9 @@ class Gui(QMainWindow):
         self.w.setText(helpText)
         self.w.setReadOnly(True)
         self.w.show()
+
+    def selectOutput(self):
+        self.outputMenu = QMenu()
 
     def initUI(self):
 
@@ -90,8 +97,17 @@ class Gui(QMainWindow):
         fileMenu.addAction(helpAction)
         fileMenu.addAction(exitAction)
 
+        selectorMenu = menubar.addMenu('&Output format')
+        self.selectorGroup = QActionGroup(self, exclusive=True)
+        selectMoin = self.selectorGroup.addAction(QAction('Moinmoin table', self, checkable=True))
+        selectorMenu.addAction(selectMoin)
+        selectCSV = self.selectorGroup.addAction(QAction('CSV', self, checkable=True))
+        selectorMenu.addAction(selectCSV)
+        selectTSV = self.selectorGroup.addAction(QAction('TSV', self, checkable=True))
+        selectorMenu.addAction(selectTSV)
+
         self.setGeometry(500, 500, 500, 200)
-        self.setWindowTitle('Nmap2Moin')
+        self.setWindowTitle('Nmap2xGUI')
         self.show()
 
     def button1(self):
@@ -114,8 +130,21 @@ class Gui(QMainWindow):
             self.statusBar().showMessage("Please enter a valid filenames for the source and target.")
         else:
             root = parseXml(getXml(fileLoc))
-            makeText(formatMoin(getNameAddr(root)), fileTarget)
-            self.statusBar().showMessage("All done!")
+            if self.selectorGroup.checkedAction():
+                if self.selectorGroup.checkedAction().text() == "Moinmoin table":
+                    makeText(formatMoin(getNameAddr(root)), fileTarget)
+                    self.statusBar().showMessage("All done!")
+                elif self.selectorGroup.checkedAction().text() == "CSV":
+                    makeText(formatCsv(getNameAddr(root)), fileTarget)
+                    self.statusBar().showMessage("All done!")
+                elif self.selectorGroup.checkedAction().text() == "TSV":
+                    makeText(formatTsv(getNameAddr(root)), fileTarget)
+                    self.statusBar().showMessage("All done!")
+                else:
+                    self.statusBar().showMessage("Please select an output format")
+            else:
+                self.statusBar().showMessage("Please select an output format")
+
 
 def getXml(xmlLoc):
     xmlFile = open(os.path.normpath(xmlLoc))
@@ -136,15 +165,33 @@ def getNameAddr(docroot):
 def formatMoin(arr):
     arr = sorted(arr,key=lambda x: inet_aton(x[0]))
     moinArray = []
+    moinArray.append("||IP Address||Hostname||")
     for tup in arr:
         row = "||" + str(tup[0]) + "||" + str(tup[1]) + "||"
         moinArray.append(row)
     return moinArray
 
+def formatCsv(arr):
+    arr = sorted(arr,key=lambda x: inet_aton(x[0]))
+    csvArray = []
+    csvArray.append("IP Address,Hostname")
+    for tup in arr:
+        row = str(tup[0]) + "," + str(tup[1])
+        csvArray.append(row)
+    return csvArray
+
+def formatTsv(arr):
+    arr = sorted(arr,key=lambda x: inet_aton(x[0]))
+    tsvArray = []
+    tsvArray.append("IP address    Hostname")
+    for tup in arr:
+        row = str(tup[0]) + "   " + str(tup[1])
+        tsvArray.append(row)
+    return tsvArray
+
 def makeText(arr, saveLoc):
     saveLoc = os.path.normpath(saveLoc)
     file = open(saveLoc,"w")
-    file.write("||IP Address||Hostname||\n")
     for row in arr:
         file.write(row + "\n")
     file.close()
