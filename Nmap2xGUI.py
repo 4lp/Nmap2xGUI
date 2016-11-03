@@ -1,6 +1,6 @@
 import sys
 from PyQt5.QtWidgets import (QMainWindow, QFileDialog, QApplication, QPushButton, QLineEdit, QAction, qApp, QTextEdit,
-                             QWidget, QActionGroup)
+                             QWidget, QActionGroup, QMessageBox)
 from PyQt5.QtCore import pyqtSlot
 import xml.etree.ElementTree as ET
 import os
@@ -13,12 +13,36 @@ class HelpPopup(QTextEdit):
     def helpWindow(self):
         helpText = QTextEdit("Help")
 
+
+class FileWarning(QMessageBox):
+    def __init__(self):
+        QWidget.__init__(self)            
+
+
 class Gui(QMainWindow):
     
     def __init__(self):
         super().__init__()
         
         self.initUI()
+
+    def fileWarning(self, target):
+        global fileTarget
+        self.warning = FileWarning.warning(self, "File exists", "%s already exists, overwrite?" % fileTarget, QMessageBox.Ok | QMessageBox.Cancel)
+        reply = self.warning
+        # 1024 = 0x00000400 = PyQt Ok signal
+        if reply == 1024:
+            pass
+        # let's only overwrite if explicitly told to do so and prompt for another name
+        else:
+            if self.selectorGroup.checkedAction().text() == "Moinmoin table":
+                fileTarget = QFileDialog.getSaveFileName(self, 'Save file', '', ("Text file(*.txt)"))
+            if self.selectorGroup.checkedAction().text() == "CSV":
+                fileTarget = QFileDialog.getSaveFileName(self, 'Save file', '', ("CSV file(*.csv)"))  
+            if self.selectorGroup.checkedAction().text() == "TSV":
+                fileTarget = QFileDialog.getSaveFileName(self, 'Save file', '', ("TSV file(*.tsv)"))
+            return fileTarget
+
 
     def showHelp(self):
         self.w = HelpPopup()
@@ -29,17 +53,16 @@ class Gui(QMainWindow):
                     "This tool was developed to save time when documenting new networks. For now, it's really only useful if you need to save a directory of which hostnames correspond to which"
                     "IP addresses in, for example, the company wiki."
                     "\n"
-                    "Using this utility is easy - simply press the \"Find XML file...\" button to locate your Nmap-generated XML file, "
-                    "then press the \"Set save target...\" button to specify the file where you would like your output saved to. "
-                    "Then, select what format you would like your output saved in."
-                    "Once both fields and the output format are correctly set, click the \"CONVERT!\" button and the conversion will happen."
+                    "Using this utility is easy - simply press the \"Find XML file(s)...\" button to locate your Nmap-generated XML file(s). "
+                    "Then, select what format you would like your output saved in from the top menu."
+                    "Each converted Nmap xml file will be saved as the original filename plus the proper extension in the parent folder e.g. /home/test.xml will be saved as /home/test.csv if"
+                    "the CSV option is selected."
+                    "Once xml file(s) and output format are correctly set, click the \"CONVERT!\" button and the conversion will happen."
                     "\n"
                     "\n"
                     "Important notes:\n"
-                    "- If the Moinmoin table output is selected, the output of this utility is a text file containing a Moinmoin table in the form: \n"
-                    "               ||Hostname||IP Address|| \n"
-                    "As such it will only include devices with a hostname.\n"
-                    "- This utility outputs a list sorted by IP address\n"
+                    "- This utility will only include devices with a hostname.\n"
+                    "- This utility outputs a list sorted by IP address with column titles.\n"
                     "- This utility has only been tested on /24 networks and smaller (I don't see any reason why it wouldn't work for bigger "
                     "networks but the sorting may be messed up)\n"
                     "\n"
@@ -53,11 +76,8 @@ class Gui(QMainWindow):
 
     def initUI(self):
 
-        self.btn1 = QPushButton("Find XML file...", self)
+        self.btn1 = QPushButton("Find XML file(s)...", self)
         self.btn1.move(30, 50)
-        
-        self.btn2 = QPushButton("Set save target...", self)
-        self.btn2.move(30, 100)
 
         self.btn3 = QPushButton("CONVERT!", self)
         self.btn3.move(150, 150)
@@ -67,18 +87,11 @@ class Gui(QMainWindow):
         self.le1.move(150, 50)
         self.le1.setReadOnly(True)
 
-        self.le2 = QLineEdit(self)
-        self.le2.setFixedWidth(300)
-        self.le2.move(150, 100)
-        self.le2.setReadOnly(True)
-
         self.btn1.clicked.connect(self.button1)
-        self.btn2.clicked.connect(self.button2)
         self.btn3.clicked.connect(self.button3)
 
         self.btn1.setStatusTip('Browse to your Nmap XML file')
-        self.btn2.setStatusTip('Set your target output file')
-        self.btn3.setStatusTip('Convert Nmap XML to Moinmoin table')
+        self.btn3.setStatusTip('Convert Nmap XML')
 
         self.statusBar()
 
@@ -112,38 +125,62 @@ class Gui(QMainWindow):
 
     def button1(self):
 
-        fname = QFileDialog.getOpenFileName(self, 'Open file', '',("XML files(*.xml)"))
-        file = os.path.normpath(fname[0]) #Qfiles are tuples that return a filter as well
-        self.le1.setText(file)
-
-    def button2(self):
-
-        fname = QFileDialog.getSaveFileName(self, 'Save file', '', ("Text file(*.txt)"))
-        file = os.path.normpath(fname[0])
-        self.le2.setText(file)
+        fname = QFileDialog.getOpenFileNames(self, 'Open file', '',("XML files(*.xml)"))
+        self.le1.setText("")
+        i = 0
+        for name in fname[0]:
+            if i != 0:
+                self.le1.insert(", ")
+            self.le1.insert(os.path.normpath(name))
+            i = i + 1
 
     def button3(self):
 
-        fileLoc = self.le1.text()
-        fileTarget = self.le2.text()
-        if (fileLoc == "") or (fileTarget == "") or (fileLoc == ".") or (fileTarget == "."):
+        fileLoc = self.le1.text().split(", ")
+        if (fileLoc == "") or (fileLoc == "."):
             self.statusBar().showMessage("Please enter a valid filenames for the source and target.")
         else:
-            root = parseXml(getXml(fileLoc))
-            if self.selectorGroup.checkedAction():
-                if self.selectorGroup.checkedAction().text() == "Moinmoin table":
-                    makeText(formatMoin(getNameAddr(root)), fileTarget)
-                    self.statusBar().showMessage("All done!")
-                elif self.selectorGroup.checkedAction().text() == "CSV":
-                    makeText(formatCsv(getNameAddr(root)), fileTarget)
-                    self.statusBar().showMessage("All done!")
-                elif self.selectorGroup.checkedAction().text() == "TSV":
-                    makeText(formatTsv(getNameAddr(root)), fileTarget)
-                    self.statusBar().showMessage("All done!")
+            for file in fileLoc:
+                root = parseXml(getXml(file))
+                if self.selectorGroup.checkedAction():
+                    if self.selectorGroup.checkedAction().text() == "Moinmoin table":
+                        global fileTarget
+                        fileTarget = os.path.splitext(file)[0] + ".txt"
+                        if os.path.isfile(fileTarget):
+                            self.fileWarning(fileTarget)
+                            try:
+                                makeText(formatMoin(getNameAddr(root)), fileTarget)
+                            except AttributeError:
+                                break
+                        else:
+                            makeText(formatMoin(getNameAddr(root)), fileTarget)
+                        self.statusBar().showMessage("All done!")
+                    elif self.selectorGroup.checkedAction().text() == "CSV":
+                        fileTarget = os.path.splitext(file)[0] + ".csv"
+                        if os.path.isfile(fileTarget):
+                            self.fileWarning(fileTarget)
+                            try:
+                                makeText(formatCsv(getNameAddr(root)), fileTarget)
+                            except AttributeError:
+                                break
+                        else:
+                            makeText(formatCsv(getNameAddr(root)), fileTarget)
+                        self.statusBar().showMessage("All done!")
+                    elif self.selectorGroup.checkedAction().text() == "TSV":
+                        fileTarget = os.path.splitext(file)[0] + ".tsv"
+                        if os.path.isfile(fileTarget):
+                            self.fileWarning(fileTarget)
+                            try:
+                                makeText(formatTsv(getNameAddr(root)), fileTarget)
+                            except AttributeError:
+                                break
+                        else:
+                            makeText(formatTsv(getNameAddr(root)), fileTarget)
+                        self.statusBar().showMessage("All done!")
+                    else:
+                        self.statusBar().showMessage("Please select an output format")
                 else:
                     self.statusBar().showMessage("Please select an output format")
-            else:
-                self.statusBar().showMessage("Please select an output format")
 
 
 def getXml(xmlLoc):
@@ -174,7 +211,7 @@ def formatMoin(arr):
 def formatCsv(arr):
     arr = sorted(arr,key=lambda x: inet_aton(x[0]))
     csvArray = []
-    csvArray.append("IP Address,Hostname")
+    csvArray.append("IP_Address,Hostname")
     for tup in arr:
         row = str(tup[0]) + "," + str(tup[1])
         csvArray.append(row)
@@ -183,7 +220,7 @@ def formatCsv(arr):
 def formatTsv(arr):
     arr = sorted(arr,key=lambda x: inet_aton(x[0]))
     tsvArray = []
-    tsvArray.append("IP address    Hostname")
+    tsvArray.append("IP_address    Hostname")
     for tup in arr:
         row = str(tup[0]) + "   " + str(tup[1])
         tsvArray.append(row)
