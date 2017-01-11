@@ -27,8 +27,7 @@ class Gui(QMainWindow):
         self.initUI()
 
     def fileWarning(self, target):
-        global fileTarget
-        self.warning = FileWarning.warning(self, "File exists", "%s already exists, overwrite?" % fileTarget, QMessageBox.Ok | QMessageBox.Cancel)
+        self.warning = FileWarning.warning(self, "File exists", "%s already exists, overwrite?" % target, QMessageBox.Ok | QMessageBox.Cancel)
         reply = self.warning
         # 1024 = 0x00000400 = PyQt Ok signal
         if reply == 1024:
@@ -36,37 +35,29 @@ class Gui(QMainWindow):
         # let's only overwrite if explicitly told to do so and prompt for another name
         else:
             if self.selectorGroup.checkedAction().text() == "Moinmoin table":
-                fileTarget = QFileDialog.getSaveFileName(self, 'Save file', '', ("Text file(*.txt)"))
+                target = QFileDialog.getSaveFileName(self, 'Save file', '', ("Text file(*.txt)"))
             if self.selectorGroup.checkedAction().text() == "CSV":
-                fileTarget = QFileDialog.getSaveFileName(self, 'Save file', '', ("CSV file(*.csv)"))  
+                target = QFileDialog.getSaveFileName(self, 'Save file', '', ("CSV file(*.csv)"))  
             if self.selectorGroup.checkedAction().text() == "TSV":
-                fileTarget = QFileDialog.getSaveFileName(self, 'Save file', '', ("TSV file(*.tsv)"))
-            return fileTarget
+                target = QFileDialog.getSaveFileName(self, 'Save file', '', ("TSV file(*.tsv)"))
+            return target
 
 
     def showHelp(self):
         self.w = HelpPopup()
         self.w.setGeometry(200, 200, 400, 250)
         self.w.setWindowTitle("Help")
-        helpText = ("Weclome to Nmap2xGUI, the Nmap XML converter!\n"
-                    "\n"
-                    "This tool was developed to save time when documenting new networks. For now, it's really only useful if you need to save a directory of which hostnames correspond to which"
-                    "IP addresses in, for example, the company wiki."
-                    "\n"
-                    "Using this utility is easy - simply press the \"Find XML file(s)...\" button to locate your Nmap-generated XML file(s). "
-                    "Then, select what format you would like your output saved in from the top menu."
-                    "Each converted Nmap xml file will be saved as the original filename plus the proper extension in the parent folder e.g. /home/test.xml will be saved as /home/test.csv if"
-                    "the CSV option is selected."
-                    "Once xml file(s) and output format are correctly set, click the \"CONVERT!\" button and the conversion will happen."
-                    "\n"
-                    "\n"
-                    "Important notes:\n"
-                    "- This utility will only include devices with a hostname.\n"
-                    "- This utility outputs a list sorted by IP address with column titles.\n"
-                    "- This utility has only been tested on /24 networks and smaller (I don't see any reason why it wouldn't work for bigger "
-                    "networks but the sorting may be messed up)\n"
-                    "\n"
-                    "        ")
+        helpText = ("""Weclome to Nmap2xGUI, the Nmap XML converter! 
+                     
+                    This tool was developed to save time when documenting new networks. For now, it's really only useful if you need to save a directory of which hostnames correspond to which IP addresses in, for example, the company wiki.
+                     
+                    Using this utility is easy - simply press the \Find XML file(s)...\ button to locate your Nmap-generated XML file(s). Then, select what format you would like your output saved in from the top menu. Each converted Nmap xml file will be saved as the original filename plus the proper extension in the parent folder e.g. /home/test.xml will be saved as /home/test.csv if the CSV option is selected. Once xml file(s) and output format are correctly set, click the \CONVERT!\ button and the conversion will happen.
+                     
+                    Important notes: 
+                    - This utility will only include devices with a hostname. 
+                    - This utility outputs a list sorted by IP address with column titles. 
+                    - This utility has only been tested on /24 networks and smaller (I don't see any reason why it wouldn't work for bigger 
+                    networks but the sorting may be messed up)""")
         self.w.setText(helpText)
         self.w.setReadOnly(True)
         self.w.show()
@@ -144,39 +135,11 @@ class Gui(QMainWindow):
                 root = parseXml(getXml(file))
                 if self.selectorGroup.checkedAction():
                     if self.selectorGroup.checkedAction().text() == "Moinmoin table":
-                        global fileTarget
-                        fileTarget = os.path.splitext(file)[0] + ".txt"
-                        if os.path.isfile(fileTarget):
-                            self.fileWarning(fileTarget)
-                            try:
-                                makeText(formatMoin(getNameAddr(root)), fileTarget)
-                            except AttributeError:
-                                break
-                        else:
-                            makeText(formatMoin(getNameAddr(root)), fileTarget)
-                        self.statusBar().showMessage("All done!")
+                        selectConversion(".txt", formatMoin, file, self, root)
                     elif self.selectorGroup.checkedAction().text() == "CSV":
-                        fileTarget = os.path.splitext(file)[0] + ".csv"
-                        if os.path.isfile(fileTarget):
-                            self.fileWarning(fileTarget)
-                            try:
-                                makeText(formatCsv(getNameAddr(root)), fileTarget)
-                            except AttributeError:
-                                break
-                        else:
-                            makeText(formatCsv(getNameAddr(root)), fileTarget)
-                        self.statusBar().showMessage("All done!")
+                        selectConversion(".csv", formatCsv, file, self, root)
                     elif self.selectorGroup.checkedAction().text() == "TSV":
-                        fileTarget = os.path.splitext(file)[0] + ".tsv"
-                        if os.path.isfile(fileTarget):
-                            self.fileWarning(fileTarget)
-                            try:
-                                makeText(formatTsv(getNameAddr(root)), fileTarget)
-                            except AttributeError:
-                                break
-                        else:
-                            makeText(formatTsv(getNameAddr(root)), fileTarget)
-                        self.statusBar().showMessage("All done!")
+                        selectConversion(".tsv", formatTsv, file, self, root)
                     else:
                         self.statusBar().showMessage("Please select an output format")
                 else:
@@ -232,6 +195,19 @@ def makeText(arr, saveLoc):
     for row in arr:
         file.write(row + "\n")
     file.close()
+
+def selectConversion(type, converter, file, context, root):
+    fileTarget = os.path.splitext(file)[0] + type
+    if os.path.isfile(fileTarget):
+        context.fileWarning(fileTarget)
+        try:
+            makeText(converter(getNameAddr(root)), fileTarget)
+        except AttributeError:
+            print("Not a valid file format")
+            sys.exit(app.exec_())
+    else:
+        makeText(converter(getNameAddr(root)), fileTarget)
+    context.statusBar().showMessage("All done!")
 
 if __name__ == '__main__':
     
